@@ -6,5 +6,5 @@ variable "environment" {
 variable "medallion_layers" {
   description = "A list of the Medallion architecture layers"
   type        = list(string)
-  default     = ["bronze", "silver", "gold"]
+  default     = ["landing", "bronze", "silver", "gold"]
 }
