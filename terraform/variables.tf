@@ -1,5 +1,10 @@
 variable "environment" {
-  description = "The deployment environment (e.g., dev, test, prod)"
+  description = "The deployment environment (dev, test, or prod)"
   type        = string
-  default     = "dev" 
+}
+
+variable "medallion_layers" {
+  description = "A list of the Medallion architecture layers"
+  type        = list(string)
+  default     = ["bronze", "silver", "gold"]
 }
