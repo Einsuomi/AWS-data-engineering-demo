@@ -16,10 +16,6 @@ resource "aws_s3_bucket" "medallion_buckets" {
 }
 
 # --- Placeholder for Databricks Workspace Creation ---
-# NOTE: Creating a Databricks workspace on AWS is a complex resource that requires
-# pre-existing networking (VPC, subnets) and credentials. The code below is a
-# conceptual placeholder to show HOW you would do it. For your 2-day project,
-# focus on the S3 buckets and explain this part.
 
 /*
 resource "databricks_mws_workspaces" "this" {
