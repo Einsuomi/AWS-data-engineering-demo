@@ -32,6 +32,7 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: ./terraform
 
       - name: Terraform Workspace Selection
         run: terraform workspace select $TF_WORKSPACE || terraform workspace new $TF_WORKSPACE
@@ -39,8 +40,9 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: terraform plan -var="environment=$TF_WORKSPACE" -no-color
-        # For pull requests, we only run a plan, not an apply
+        working-directory: ./terraform
 
       - name: Terraform Apply
         if: github.ref != 'refs/heads/pull/*' && github.event_name == 'push'
         run: terraform apply -auto-approve -var="environment=$TF_WORKSPACE"
+        working-directory: ./terraform
