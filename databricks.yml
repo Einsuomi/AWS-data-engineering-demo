@@ -37,7 +37,7 @@ resources:
           num_workers: 1
       libraries:
         - notebook:
-            path: ./DLT_Pipeline/transformations/my_transformation.py
+            path: ./DLT_Pipeline/transformations/my_transformation.ipynb
       # Pass variables into the DLT pipeline's Spark configuration.
       configuration:
         fingrid.catalog: ${var.catalog}
