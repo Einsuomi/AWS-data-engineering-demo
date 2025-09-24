@@ -1,0 +1,32 @@
+# A Databricks Asset Bundle configuration for multiple environments
+
+bundle:
+  name: fingrid-data-pipeline
+
+# Defines deployment targets for dev, test, and prod
+targets:
+  dev:
+    default: true
+    workspace:
+      host: https://your-dev-workspace.databricks.com
+  test:
+    workspace:
+      host: https://your-test-workspace.databricks.com
+  prod:
+    workspace:
+      host: https://your-prod-workspace.databricks.com
+
+# Defines the resources to be deployed
+resources:
+  pipelines:
+    my_dlt_pipeline: # This is the name used in the 'bundle run' command
+      name: "Fingrid DLT Pipeline"
+      clusters:
+        - label: "default"
+          num_workers: 1
+      development: true
+      # This assumes your notebooks are in the root of the GitHub repo.
+      # Adjust the path if they are in a subdirectory (e.g., ./databricks_notebooks/1_Configuration.ipynb)
+      notebooks:
+        - notebook_path: ./1_Configuration.ipynb
+        - notebook_path: ./2_source_to_landing.ipynb
