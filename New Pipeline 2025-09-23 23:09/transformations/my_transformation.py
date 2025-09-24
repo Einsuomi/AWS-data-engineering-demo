@@ -1,8 +1,10 @@
 import dlt
-from pyspark.sql.functions import col, explode, current_timestamp, lit, row_number, when, split, regexp_extract
+from pyspark.sql.functions import col, explode, current_timestamp, lit, row_number, when, split, regexp_extract, from_json, sha2, concat_ws
 from pyspark.sql.window import Window
 from datetime import date, timedelta
 from math import ceil
+from pyspark.sql.types import ArrayType, MapType, StringType
+
 
 # =====================================================================================
 # Configuration
@@ -44,14 +46,17 @@ def create_bronze_table(name, path):
         table_properties={"pipelines.target.database": BRONZE_SCHEMA}
     )
     def bronze_table():
+        json_schema = ArrayType(MapType(StringType(), StringType()))
+
         return (
             spark.readStream
                 .format("cloudFiles")
                 .option("cloudFiles.format", "json")
                 .option("cloudFiles.schemaLocation", f"/mnt/dlt/checkpoints/bronze_{name}")
                 .load(path)
+                .withColumn("parsed_data", from_json(col("data"), json_schema))
                 .select(
-                    explode("data").alias("record"),
+                    explode("parsed_data").alias("record"),
                     current_timestamp().alias("ingestion_timestamp"),
                     "_metadata"
                 )
@@ -65,8 +70,7 @@ for name, config in datasets_config.items():
 # Clean, flatten, and structure the data from each bronze table.
 # =====================================================================================
 @dlt.table(
-    name="silver_solar_forecast",
-    table_properties={"pipelines.target.database": SILVER_SCHEMA}
+    name=f"{SILVER_SCHEMA}.silver_solar_forecast"
 )
 def silver_solar_forecast():
     return (
@@ -81,7 +85,7 @@ def silver_solar_forecast():
     )
 
 @dlt.table(
-    name="silver_wind_forecast",
+    name=f"{SILVER_SCHEMA}.silver_wind_forecast",
     table_properties={"pipelines.target.database": SILVER_SCHEMA}
 )
 def silver_wind_forecast():
@@ -97,7 +101,7 @@ def silver_wind_forecast():
     )
 
 @dlt.table(
-    name="silver_electricity_consumption",
+    name=f"{SILVER_SCHEMA}.silver_electricity_consumption",
     table_properties={"pipelines.target.database": SILVER_SCHEMA}
 )
 def silver_electricity_consumption():
@@ -115,126 +119,139 @@ def silver_electricity_consumption():
         )
     )
 
-# # =====================================================================================
-# # GOLD LAYER - DIMENSIONS
-# # Create the static and derived dimension tables.
-# # =====================================================================================
-# @dlt.table(name="dim_date", comment="Static date dimension from 2020 to 2050.", table_properties={"pipelines.target.database": GOLD_SCHEMA})
-# def dim_date():
-#     start_date, end_date = date(2020, 1, 1), date(2050, 12, 31)
-#     dates = []
-#     current = start_date
-#     while current <= end_date:
-#         dates.append({
-#             "date": current, "date_id": int(current.strftime("%Y%m%d")), "year": current.year,
-#             "month": current.month, "day": current.day, "day_of_week": current.weekday() + 1,
-#             "day_name": current.strftime('%A'), "month_name": current.strftime('%B'),
-#             "quarter": ceil(current.month / 3), "is_weekday": 1 if current.weekday() < 5 else 0
-#         })
-#         current += timedelta(days=1)
-#     return spark.createDataFrame(dates)
+# =====================================================================================
+# GOLD LAYER - DIMENSIONS
+# Create the static and derived dimension tables.
+# =====================================================================================
+@dlt.table(name=f"{GOLD_SCHEMA}.dim_date", comment="Static date dimension from 2020 to 2050.")
+def dim_date():
+    start_date, end_date = date(2020, 1, 1), date(2050, 12, 31)
+    dates = []
+    current = start_date
+    while current <= end_date:
+        dates.append({
+            "date": current, "date_id": int(current.strftime("%Y%m%d")), "year": current.year,
+            "month": current.month, "day": current.day, "day_of_week": current.weekday() + 1,
+            "day_name": current.strftime('%A'), "month_name": current.strftime('%B'),
+            "quarter": ceil(current.month / 3), "is_weekday": 1 if current.weekday() < 5 else 0
+        })
+        current += timedelta(days=1)
+    return spark.createDataFrame(dates)
 
-# @dlt.table(name="dim_time", comment="Static time dimension in 15-minute intervals.", table_properties={"pipelines.target.database": GOLD_SCHEMA})
-# def dim_time():
-#     time_quarters = []
-#     for hour in range(24):
-#         for quarter in range(4):
-#             minutes = quarter * 15
-#             time_quarters.append({
-#                 "time_quarter_id": hour * 4 + quarter, "hour": hour, "quarter_of_hour": quarter,
-#                 "minute": minutes, "time_15min": f"{hour:02d}:{minutes:02d}:00"
-#             })
-#     return spark.createDataFrame(time_quarters)
+@dlt.table(name=f"{GOLD_SCHEMA}.dim_time", comment="Static time dimension in 15-minute intervals.")
+def dim_time():
+    time_quarters = []
+    for hour in range(24):
+        for quarter in range(4):
+            minutes = quarter * 15
+            time_quarters.append({
+                "time_quarter_id": hour * 4 + quarter, "hour": hour, "quarter_of_hour": quarter,
+                "minute": minutes, "time_15min": f"{hour:02d}:{minutes:02d}:00"
+            })
+    return spark.createDataFrame(time_quarters)
 
-# @dlt.table(name="dim_customer", comment="Dimension for electricity customer types.", table_properties={"pipelines.target.database": GOLD_SCHEMA})
-# def dim_customer():
-#     return (
-#         dlt.read(f"{SILVER_SCHEMA}.silver_electricity_consumption")
-#         .select("customer_type", "time_series_type", "res")
-#         .dropDuplicates()
-#         .withColumn('customerID', row_number().over(Window().orderBy(lit(1))).cast('bigint'))
-#     )
 
-# @dlt.table(name="dim_generate_type", comment="Dimension for power generation types (wind, solar).",table_properties={"pipelines.target.database": GOLD_SCHEMA})
+@dlt.table(name=f"{GOLD_SCHEMA}.dim_generate_type", comment="Dimension for power generation types (wind, solar).")
+def dim_generate_type():
+    # Combine forecast streams to create the dimension
+    solar_df = dlt.read(f"{SILVER_SCHEMA}.silver_solar_forecast").select("dataset_id").dropDuplicates()
+    wind_df = dlt.read(f"{SILVER_SCHEMA}.silver_wind_forecast").select("dataset_id").dropDuplicates()
 
-# def dim_generate_type():
-#     # Combine forecast streams to create the dimension
-#     solar_df = dlt.read(f"{SILVER_SCHEMA}.silver_solar_forecast").select("dataset_id").dropDuplicates()
-#     wind_df = dlt.read(f"{SILVER_SCHEMA}.silver_wind_forecast").select("dataset_id").dropDuplicates()
-
-#     return (
-#         solar_df.union(wind_df)
-#         .withColumn("generate_type",
-#             when(col("dataset_id") == 248, "Solar")
-#             .when(col("dataset_id") == 245, "Wind")
-#             .otherwise("Other")
-#         )
-#         .withColumn("update_frequency", lit("15 mins"))
-#     )
+    return (
+        solar_df.union(wind_df)
+        .withColumn("generate_type",
+            when(col("dataset_id") == 248, "Solar")
+            .when(col("dataset_id") == 245, "Wind")
+            .otherwise("Other")
+        )
+        .withColumn("update_frequency", lit("15 mins"))
+    )
+@dlt.view(name="dim_customer_source", comment="Prepares the source stream for the customer dimension.")
+def dim_customer_source():
+    return dlt.read_stream("silver.silver_electricity_consumption").withColumn("customerID", sha2(concat_ws("||", col("customer_type"), col("time_series_type"), col("res")), 256))
+dlt.create_target_table(name=f"{GOLD_SCHEMA}.dim_customer", comment="Dimension for electricity customer types")
+dlt.apply_changes(target=f"{GOLD_SCHEMA}.dim_customer", source="dim_customer_source", keys=["customerID"], sequence_by=col("start_time"))
 
 # # =====================================================================================
 # # GOLD LAYER - FACTS
-# # Create the fact tables using DLT's `apply_changes` for SCD Type 1 logic.
+# # Create the fact tables for SCD Type 1 logic.
 # # =====================================================================================
 # # --- Fact Consumption ---
-# dlt.create_target_table(
-#     name="fact_consumption",
-#     table_properties={"pipelines.target.database": GOLD_SCHEMA}
-# )
+#     .withColumn("time_15min", regexp_extract(fact_stream["start_time"].cast("string"), r"(\d{2}:\d{2}:\d{2})", 1))
+#            regexp_extract(col("start_time").cast("string"), r"(\d{2}:\d{2}:\d{2})", 1))
 
-# consumption_stream_df = (
-#     dlt.read_stream(f"{SILVER_SCHEMA}.silver_electricity_consumption")
-#     .join(dlt.read(f"{GOLD_SCHEMA}.dim_customer"), ["customer_type", "time_series_type", "res"], "left")
-#     .withColumn("date", col("start_time").cast("date"))
-#     .join(dlt.read(f"{GOLD_SCHEMA}.dim_date"), "date", "left")
-#     .withColumn("time_15min", regexp_extract(col("start_time").cast("string"), r"(\d{2}:\d{2}:\d{2})", 1))
-#     .join(dlt.read(f"{GOLD_SCHEMA}.dim_time"), "time_15min", "left")
-#     .select(
-#         "date_id",
-#         col("time_quarter_id").alias("start_time_id"),
-#         "customerID",
-#         "value",
-#         "ingestion_timestamp"
-#     )
-# )
+# --- Fact Forecast Source View ---
+@dlt.view(name="fact_forecast_source")
+def fact_forecast_source():
+    return (
+        dlt.read_stream(f"{SILVER_SCHEMA}.silver_solar_forecast")
+        .unionByName(dlt.read_stream(f"{SILVER_SCHEMA}.silver_wind_forecast"))
+        .withColumn("date", col("start_time").cast("date"))
+        .join(dlt.read(f"{GOLD_SCHEMA}.dim_date"), "date", "left")
+        .withColumn(
+            "time_15min",
+            regexp_extract(col("start_time").cast("string"), r"(\d:\d:\d)", 1)
+        )
+        .join(dlt.read(f"{GOLD_SCHEMA}.dim_time"), "time_15min", "left")
+        .select(
+            "date_id",
+            col("time_quarter_id").alias("start_time_id"),
+            "dataset_id",
+            "value",
+            "ingestion_timestamp"
+        )
+    )
 
-# dlt.apply_changes(
-#     # FIX: Use the fully qualified name for the target
-#     target="fact_consumption", 
-#     source=consumption_stream_df,
-#     keys=["date_id", "start_time_id", "customerID"],
-#     sequence_by="ingestion_timestamp",
-#     stored_as_scd_type=1
-# )
+# --- Create Target Table for Fact Forecast ---
+dlt.create_streaming_table(name=f"{GOLD_SCHEMA}.fact_forecast")
 
-# # --- Fact Forecast ---
-# dlt.create_target_table(
-#     name="fact_forecast",
-#     table_properties={"pipelines.target.database": GOLD_SCHEMA}
-# )
+# --- Auto CDC for Fact Forecast (SCD Type 1) ---
+dlt.create_auto_cdc_flow(
+    target=f"{GOLD_SCHEMA}.fact_forecast",
+    source="fact_forecast_source",
+    keys=["date_id", "start_time_id", "dataset_id"],
+    sequence_by=col("ingestion_timestamp"),
+    stored_as_scd_type=1
+)
 
-# forecast_stream_df = (
-#     dlt.read_stream(f"{SILVER_SCHEMA}.silver_solar_forecast")
-#     # FIX: Added a dot between the schema and table name
-#     .unionByName(dlt.read_stream(f"{SILVER_SCHEMA}.silver_wind_forecast"))
-#     .withColumn("date", col("start_time").cast("date"))
-#     .join(dlt.read(f"{GOLD_SCHEMA}.dim_date"), "date", "left")
-#     .withColumn("time_15min", regexp_extract(col("start_time").cast("string"), r"(\d{2}:\d{2}:\d{2})", 1))
-#     .join(dlt.read(f"{GOLD_SCHEMA}.dim_time"), "time_15min", "left")
-#     .select(
-#         "date_id",
-#         col("time_quarter_id").alias("start_time_id"),
-#         "dataset_id",
-#         "value",
-#         "ingestion_timestamp"
-#     )
-# )
+# --- Fact Consumption Source View ---
+@dlt.view(name="fact_consumption_source")
+def fact_consumption_source():
+    fact_stream = (
+        dlt.read_stream(f"{SILVER_SCHEMA}.silver_electricity_consumption")
+        .withColumn(
+            "customerID",
+            sha2(concat_ws("||", col("customer_type"), col("time_series_type"), col("res")), 256)
+        )
+    )
 
-# dlt.apply_changes(
-#     # FIX: Use the fully qualified name for the target
-#     target="fact_forecast",
-#     source=forecast_stream_df,
-#     keys=["date_id", "start_time_id", "dataset_id"],
-#     sequence_by="ingestion_timestamp",
-#     stored_as_scd_type=1
-# )
+    joined = (
+        fact_stream
+        .withColumn("date", col("start_time").cast("date"))
+        .join(dlt.read(f"{GOLD_SCHEMA}.dim_date"), "date", "left")
+        .withColumn(
+            "time_15min",
+            regexp_extract(col("start_time").cast("string"), r"(\d:\d:\d)", 1)
+        )
+        .join(dlt.read(f"{GOLD_SCHEMA}.dim_time"), "time_15min", "left")
+        .select(
+            "date_id",
+            col("time_quarter_id").alias("start_time_id"),
+            "customerID",
+            "value",
+            "ingestion_timestamp"
+        )
+    )
+    return joined
+
+# --- Create Target Table for Fact Consumption ---
+dlt.create_streaming_table(name=f"{GOLD_SCHEMA}.fact_consumption")
+
+# --- Auto CDC for Fact Consumption (SCD Type 1) ---
+dlt.create_auto_cdc_flow(
+    target=f"{GOLD_SCHEMA}.fact_consumption",
+    source="fact_consumption_source",
+    keys=["date_id", "start_time_id", "customerID"],
+    sequence_by=col("ingestion_timestamp"),
+    stored_as_scd_type=1
+)
