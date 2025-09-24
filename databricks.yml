@@ -2,35 +2,57 @@
 bundle:
   name: fingrid-data-pipeline
 
+# 1. Declare all custom variables at the top level with default values from your dev environment.
+variables:
+  cluster_id:
+    description: "The ID of the cluster to use for job tasks."
+    default: "0923-182558-foyt4nl4"
+  catalog:
+    description: "The Unity Catalog to use."
+    default: "w_dev"
+  landing_root:
+    description: "The root S3 path for the landing zone."
+    default: "s3a://wartsila-datalake-dev-landing/"
+  managed_uc_root:
+    description: "The root S3 path for the managed Unity Catalog."
+    default: "s3a://wartsila-datalake-dev-managed-uc/"
+  bronze_root:
+    description: "The root S3 path for the bronze layer."
+    default: "s3a://wartsila-datalake-dev-bronze/"
+  silver_root:
+    description: "The root S3 path for the silver layer."
+    default: "s3a://wartsila-datalake-dev-silver/"
+  gold_root:
+    description: "The root S3 path for the gold layer."
+    default: "s3a://wartsila-datalake-dev-gold/"
+
 # Defines the reusable resources like jobs and pipelines.
 resources:
-  # 1. Define the Delta Live Tables (DLT) pipeline.
+  # 2. Define the Delta Live Tables (DLT) pipeline.
   pipelines:
     fingrid_dlt_pipeline:
       name: "Fingrid DLT Pipeline"
       clusters:
-        # This pipeline will use a job cluster defined by DLT.
         - label: "default"
           num_workers: 1
       libraries:
         - notebook:
             path: ./DLT_Pipeline/transformations/my_transformation.py
-      # Pass variables from the 'targets' section into the DLT pipeline's Spark configuration.
+      # Pass variables into the DLT pipeline's Spark configuration.
       configuration:
         fingrid.catalog: ${var.catalog}
         fingrid.landing_root: ${var.landing_root}
 
-  # 2. Define a multi-task job that orchestrates all notebooks and the DLT pipeline.
+  # 3. Define a multi-task job that orchestrates all notebooks and the DLT pipeline.
   jobs:
     multi_task_job:
       name: "Fingrid Data Engineering Job"
       tasks:
-        # Task 1: Run the configuration notebook to set up catalogs and schemas.
+        # Task 1: Run the configuration notebook.
         - task_key: "Run_Configuration"
-          existing_cluster_id: ${var.cluster_id} # Uses the cluster ID for the target environment.
+          existing_cluster_id: ${var.cluster_id}
           notebook_task:
             notebook_path: ./1_Configuration.ipynb
-            # Pass all necessary parameters to the configuration notebook.
             base_parameters:
               catalog: ${var.catalog}
               landing_root: ${var.landing_root}
@@ -38,43 +60,31 @@ resources:
               bronze_root: ${var.bronze_root}
               silver_root: ${var.silver_root}
               gold_root: ${var.gold_root}
-
-        # Task 2: Run the source-to-landing notebook to ingest data from the API.
+        # Task 2: Run the source-to-landing notebook.
         - task_key: "Process_Source_to_Landing"
           depends_on:
             - task_key: "Run_Configuration"
-          existing_cluster_id: ${var.cluster_id} # Uses the same cluster.
+          existing_cluster_id: ${var.cluster_id}
           notebook_task:
             notebook_path: ./2_source_to_landing.ipynb
-            # Pass the required parameters to this notebook.
             base_parameters:
               catalog: ${var.catalog}
               landing_root: ${var.landing_root}
-
-        # Task 3: Run the DLT pipeline to transform the raw data.
+        # Task 3: Run the DLT pipeline.
         - task_key: "Run_DLT_Pipeline"
           depends_on:
             - task_key: "Process_Source_to_Landing"
-          # This task runs a pipeline, not a notebook.
           pipeline_task:
-            # Link this task to the DLT pipeline defined above by its resource ID.
             pipeline_id: ${resources.pipelines.fingrid_dlt_pipeline.id}
 
-# 3. Define the deployment targets and the specific variable values for each environment.
+# 4. Define the deployment targets and override the default variables for each environment.
 targets:
   # ===== DEVELOPMENT TARGET =====
   dev:
     default: true
     workspace:
       host: https://dbc-155af052-4ab1.cloud.databricks.com/
-    variables:
-      cluster_id: "0923-182558-foyt4nl4"
-      catalog: "w_dev"
-      landing_root: "s3a://wartsila-datalake-dev-landing/"
-      managed_uc_root: "s3a://wartsila-datalake-dev-managed-uc/"
-      bronze_root: "s3a://wartsila-datalake-dev-bronze/"
-      silver_root: "s3a://wartsila-datalake-dev-silver/"
-      gold_root: "s3a://wartsila-datalake-dev-gold/"
+    # No variables needed here, as it uses the default values defined at the top.
 
   # ===== TESTING TARGET =====
   test:
@@ -101,3 +111,4 @@ targets:
       bronze_root: "s3a://wartsila-datalake-prod-bronze/"
       silver_root: "s3a://wartsila-datalake-prod-silver/"
       gold_root: "s3a://wartsila-datalake-prod-gold/"
+

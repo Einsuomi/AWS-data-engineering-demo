@@ -1,10 +1,8 @@
 name: Deploy Databricks Notebooks
 
 on:
-  # This makes the workflow runnable only via an API call (a "dispatch" event)
   workflow_dispatch:
     inputs:
-      # Define an input for the environment, defaulting to 'dev'
       environment:
         description: 'The target environment (dev, test, or prod)'
         required: true
@@ -20,12 +18,12 @@ jobs:
       - name: Setup Databricks CLI
         uses: databricks/setup-cli@main
 
-      - name: Deploy Databricks Asset Bundle
+      - name: Deploy and Run Databricks Asset Bundle
         env:
-          # These secrets must be configured in your GitHub repository settings
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
-          # Use the environment input to select the correct target from databricks.yml
+          # Deploy the job definition to Databricks
           databricks bundle deploy -t ${{ github.event.inputs.environment }}
-          databricks bundle run my_dlt_pipeline -t ${{ github.event.inputs.environment }}
+          # FINAL UPDATE: Run the job named 'multi_task_job'
+          databricks bundle run multi_task_job -t ${{ github.event.inputs.environment }}
