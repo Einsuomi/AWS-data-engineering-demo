@@ -1,32 +1,103 @@
-# A Databricks Asset Bundle configuration for multiple environments
 
 bundle:
   name: fingrid-data-pipeline
 
-# Defines deployment targets for dev, test, and prod
+# Defines the reusable resources like jobs and pipelines.
+resources:
+  # 1. Define the Delta Live Tables (DLT) pipeline.
+  pipelines:
+    fingrid_dlt_pipeline:
+      name: "Fingrid DLT Pipeline"
+      clusters:
+        # This pipeline will use a job cluster defined by DLT.
+        - label: "default"
+          num_workers: 1
+      libraries:
+        - notebook:
+            path: ./DLT_Pipeline/transformations/my_transformation.py
+      # Pass variables from the 'targets' section into the DLT pipeline's Spark configuration.
+      configuration:
+        fingrid.catalog: ${var.catalog}
+        fingrid.landing_root: ${var.landing_root}
+
+  # 2. Define a multi-task job that orchestrates all notebooks and the DLT pipeline.
+  jobs:
+    multi_task_job:
+      name: "Fingrid Data Engineering Job"
+      tasks:
+        # Task 1: Run the configuration notebook to set up catalogs and schemas.
+        - task_key: "Run_Configuration"
+          existing_cluster_id: ${var.cluster_id} # Uses the cluster ID for the target environment.
+          notebook_task:
+            notebook_path: ./1_Configuration.ipynb
+            # Pass all necessary parameters to the configuration notebook.
+            base_parameters:
+              catalog: ${var.catalog}
+              landing_root: ${var.landing_root}
+              managed_uc_root: ${var.managed_uc_root}
+              bronze_root: ${var.bronze_root}
+              silver_root: ${var.silver_root}
+              gold_root: ${var.gold_root}
+
+        # Task 2: Run the source-to-landing notebook to ingest data from the API.
+        - task_key: "Process_Source_to_Landing"
+          depends_on:
+            - task_key: "Run_Configuration"
+          existing_cluster_id: ${var.cluster_id} # Uses the same cluster.
+          notebook_task:
+            notebook_path: ./2_source_to_landing.ipynb
+            # Pass the required parameters to this notebook.
+            base_parameters:
+              catalog: ${var.catalog}
+              landing_root: ${var.landing_root}
+
+        # Task 3: Run the DLT pipeline to transform the raw data.
+        - task_key: "Run_DLT_Pipeline"
+          depends_on:
+            - task_key: "Process_Source_to_Landing"
+          # This task runs a pipeline, not a notebook.
+          pipeline_task:
+            # Link this task to the DLT pipeline defined above by its resource ID.
+            pipeline_id: ${resources.pipelines.fingrid_dlt_pipeline.id}
+
+# 3. Define the deployment targets and the specific variable values for each environment.
 targets:
+  # ===== DEVELOPMENT TARGET =====
   dev:
     default: true
     workspace:
-      host: https://your-dev-workspace.databricks.com
+      host: https://dbc-155af052-4ab1.cloud.databricks.com/
+    variables:
+      cluster_id: "0923-182558-foyt4nl4"
+      catalog: "w_dev"
+      landing_root: "s3a://wartsila-datalake-dev-landing/"
+      managed_uc_root: "s3a://wartsila-datalake-dev-managed-uc/"
+      bronze_root: "s3a://wartsila-datalake-dev-bronze/"
+      silver_root: "s3a://wartsila-datalake-dev-silver/"
+      gold_root: "s3a://wartsila-datalake-dev-gold/"
+
+  # ===== TESTING TARGET =====
   test:
     workspace:
-      host: https://your-test-workspace.databricks.com
+      host: https://dbc-c93e1e6f-75f2.cloud.databricks.com/
+    variables:
+      cluster_id: "0924-141340-473elqxr"
+      catalog: "w_test"
+      landing_root: "s3a://wartsila-datalake-test-landing/"
+      managed_uc_root: "s3a://wartsila-datalake-test-managed-uc/"
+      bronze_root: "s3a://wartsila-datalake-test-bronze/"
+      silver_root: "s3a://wartsila-datalake-test-silver/"
+      gold_root: "s3a://wartsila-datalake-test-gold/"
+
+  # ===== PRODUCTION TARGET =====
   prod:
     workspace:
       host: https://your-prod-workspace.databricks.com
-
-# Defines the resources to be deployed
-resources:
-  pipelines:
-    my_dlt_pipeline: # This is the name used in the 'bundle run' command
-      name: "Fingrid DLT Pipeline"
-      clusters:
-        - label: "default"
-          num_workers: 1
-      development: true
-      # This assumes your notebooks are in the root of the GitHub repo.
-      # Adjust the path if they are in a subdirectory (e.g., ./databricks_notebooks/1_Configuration.ipynb)
-      notebooks:
-        - notebook_path: ./1_Configuration.ipynb
-        - notebook_path: ./2_source_to_landing.ipynb
+    variables:
+      cluster_id: "YOUR_PROD_CLUSTER_ID"
+      catalog: "w_prod"
+      landing_root: "s3a://wartsila-datalake-prod-landing/"
+      managed_uc_root: "s3a://wartsila-datalake-prod-managed-uc/"
+      bronze_root: "s3a://wartsila-datalake-prod-bronze/"
+      silver_root: "s3a://wartsila-datalake-prod-silver/"
+      gold_root: "s3a://wartsila-datalake-prod-gold/"

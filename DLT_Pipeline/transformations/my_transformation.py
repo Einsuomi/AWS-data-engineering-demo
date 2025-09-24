@@ -9,9 +9,9 @@ from pyspark.sql.types import ArrayType, MapType, StringType
 # =====================================================================================
 # Configuration
 # =====================================================================================
-LANDING_ROOT = "s3a://wartsila-datalake-dev-landing/fingrid/"
+CATALOG = spark.conf.get("fingrid.catalog", "w_dev")
+LANDING_ROOT = spark.conf.get("fingrid.landing_root", "s3a://wartsila-datalake-dev-landing/fingrid/")
 
-CATALOG = "w_dev"
 BRONZE_SCHEMA = f"{CATALOG}.bronze"
 SILVER_SCHEMA = f"{CATALOG}.silver"
 GOLD_SCHEMA = f"{CATALOG}.gold"
