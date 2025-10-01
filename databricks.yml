@@ -34,6 +34,8 @@ resources:
   jobs:
     Ingestion_ETL_Pipeline:
       name: Ingestion + ETL Pipeline
+      run_as:
+        user_name: "u8627848792@gmail.com"
       tasks:
         - task_key: 1_configuration
           notebook_task:
