@@ -5,9 +5,83 @@ bundle:
   uuid: c13ad876-0585-4c73-854a-d25586d01e7a
 
 
-include:
-  - resources/*.yml
-  - resources/*/*.yml
+variables:
+  cluster_id:
+    description: "The ID of the cluster to use for job tasks in current env."
+    default: "0923-182558-foyt4nl4"
+  environment:
+    description: "The current env."
+    default: "dev"
+
+resources:
+  pipelines:
+    pipeline_etl_pipeline:
+      name: ETL_Pipeline
+      configuration:
+        datasets: '[{"id": 248, "name": "Solar power generation"}, {"id": 245, "name":
+          "Wind power generation"}, {"id": 358, "name": "Electricity
+          consumption"}]'
+        environment: ${var.environment}
+      libraries:
+        - notebook:
+            path: ./src/pipelines/DLT_Pipeline/DLT_Pipeline/transformations/**
+      schema: bronze
+      photon: true
+      catalog: w_${var.environment}
+      serverless: true
+      root_path: ./src/pipelines/DLT_Pipeline/DLT_Pipeline
+
+  jobs:
+    Ingestion_ETL_Pipeline:
+      name: Ingestion + ETL Pipeline
+      tasks:
+        - task_key: 1_configuration
+          notebook_task:
+            notebook_path: databricks_asset_bundles/src/notebooks/1_Configuration
+            base_parameters:
+              environment: ${var.environment}
+            source: GIT
+          existing_cluster_id: ${var.cluster_id}
+        - task_key: lookup
+          depends_on:
+            - task_key: 1_configuration
+          notebook_task:
+            notebook_path: databricks_asset_bundles/src/notebooks/2_dataset_loopup
+            base_parameters:
+              environment: ${var.environment}
+            source: GIT
+          existing_cluster_id: ${var.cluster_id}
+        - task_key: LoopAllDatasets
+          depends_on:
+            - task_key: lookup
+          for_each_task:
+            inputs: "{{tasks.lookup.values.datasets_to_process}}"
+            concurrency: 1
+            task:
+              task_key: SourceToLanding
+              notebook_task:
+                notebook_path: databricks_asset_bundles/src/notebooks/3_Source_To_Landing
+                base_parameters:
+                  dataset_id: "{{input.source_dataset_id}}"
+                  page_size: "{{input.page_size}}"
+                  start_timestamp: "{{input.last_timestamp}}"
+                  incremental_load_days: "{{input.load_increment_days}}"
+                  dataset_name: "{{input.source_dataset_name}}"
+                source: GIT
+              existing_cluster_id: ${var.cluster_id}
+        - task_key: ETL_Pipeline
+          depends_on:
+            - task_key: LoopAllDatasets
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.pipeline_etl_pipeline.id}
+            full_refresh: false
+      git_source:
+        git_url: https://bitbucket.org/ethanworkspace/wartsila-project/
+        git_provider: bitbucketCloud
+        git_branch: ${var.environment}
+      queue:
+        enabled: true
+
 
 targets:
   dev:
@@ -17,12 +91,17 @@ targets:
     # See also https://docs.databricks.com/dev-tools/bundles/deployment-modes.html.
     mode: development
     default: true
+    presets:
+      name_prefix: ${var.environment}_${workspace.current_user.short_name}_
+      source_linked_deployment: false
     workspace:
       host: https://dbc-155af052-4ab1.cloud.databricks.com/
 
   test:
     mode: test
-    default: true
+    presets:
+    name_prefix: ${var.environment}_${workspace.current_user.short_name}_
+    source_linked_deployment: false
     workspace:
       host: https://dbc-c93e1e6f-75f2.cloud.databricks.com/
     variables:
