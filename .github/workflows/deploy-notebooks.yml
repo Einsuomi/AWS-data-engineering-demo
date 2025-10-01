@@ -40,4 +40,4 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
           databricks bundle deploy -t ${{ github.event.inputs.environment }}
-          # databricks bundle run multi_task_job -t ${{ github.event.inputs.environment }}
+          databricks bundle run multi_task_job -t ${{ github.event.inputs.environment }}

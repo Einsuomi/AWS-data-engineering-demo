@@ -98,7 +98,7 @@ targets:
       host: https://dbc-155af052-4ab1.cloud.databricks.com/
 
   test:
-    mode: test
+    mode: production
     presets:
       name_prefix: ${var.environment}_${workspace.current_user.short_name}_
       source_linked_deployment: false
