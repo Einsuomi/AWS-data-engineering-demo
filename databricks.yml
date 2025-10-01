@@ -37,19 +37,17 @@ resources:
       tasks:
         - task_key: 1_configuration
           notebook_task:
-            notebook_path: databricks_asset_bundles/src/notebooks/1_Configuration
+            notebook_path: ./src/notebooks/1_Configuration
             base_parameters:
               environment: ${var.environment}
-            source: GIT
           existing_cluster_id: ${var.cluster_id}
         - task_key: lookup
           depends_on:
             - task_key: 1_configuration
           notebook_task:
-            notebook_path: databricks_asset_bundles/src/notebooks/2_dataset_loopup
+            notebook_path: ./src/notebooks/2_dataset_loopup
             base_parameters:
               environment: ${var.environment}
-            source: GIT
           existing_cluster_id: ${var.cluster_id}
         - task_key: LoopAllDatasets
           depends_on:
@@ -60,14 +58,13 @@ resources:
             task:
               task_key: SourceToLanding
               notebook_task:
-                notebook_path: databricks_asset_bundles/src/notebooks/3_Source_To_Landing
+                notebook_path: ./src/notebooks/3_Source_To_Landing
                 base_parameters:
                   dataset_id: "{{input.source_dataset_id}}"
                   page_size: "{{input.page_size}}"
                   start_timestamp: "{{input.last_timestamp}}"
                   incremental_load_days: "{{input.load_increment_days}}"
                   dataset_name: "{{input.source_dataset_name}}"
-                source: GIT
               existing_cluster_id: ${var.cluster_id}
         - task_key: ETL_Pipeline
           depends_on:
