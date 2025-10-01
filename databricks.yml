@@ -24,12 +24,12 @@ resources:
         environment: ${var.environment}
       libraries:
         - notebook:
-            path: ./src/pipelines/DLT_Pipeline/DLT_Pipeline/transformations/**
+            path: ./src/pipelines/DLT_Pipeline/transformations/**
       schema: bronze
       photon: true
       catalog: w_${var.environment}
       serverless: true
-      root_path: ./src/pipelines/DLT_Pipeline/DLT_Pipeline
+      root_path: ./src/pipelines/DLT_Pipeline
 
   jobs:
     Ingestion_ETL_Pipeline:
@@ -100,8 +100,8 @@ targets:
   test:
     mode: test
     presets:
-    name_prefix: ${var.environment}_${workspace.current_user.short_name}_
-    source_linked_deployment: false
+      name_prefix: ${var.environment}_${workspace.current_user.short_name}_
+      source_linked_deployment: false
     workspace:
       host: https://dbc-c93e1e6f-75f2.cloud.databricks.com/
     variables:
