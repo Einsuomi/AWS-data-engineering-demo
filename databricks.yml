@@ -74,10 +74,10 @@ resources:
           pipeline_task:
             pipeline_id: ${resources.pipelines.pipeline_etl_pipeline.id}
             full_refresh: false
-      git_source:
-        git_url: https://ethanworkspace-admin@bitbucket.org/ethanworkspace/fingrid-aws-demo.git
-        git_provider: bitbucketCloud
-        git_branch: ${var.environment}
+      # git_source:
+      #   git_url: https://ethanworkspace-admin@bitbucket.org/ethanworkspace/fingrid-aws-demo.git
+      #   git_provider: bitbucketCloud
+      #   git_branch: ${var.environment}
       queue:
         enabled: true
 
