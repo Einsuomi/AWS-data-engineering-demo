@@ -1,0 +1,51 @@
+resources:
+  jobs:
+    Ingestion_ETL_Pipeline:
+      name: Ingestion + ETL Pipeline
+      tasks:
+        - task_key: 1_configuration
+          notebook_task:
+            notebook_path: databricks_notebooks/1_Configuration
+            base_parameters:
+              environment: ${var.environment}
+            source: GIT
+          existing_cluster_id: ${var.cluster_id}
+        - task_key: lookup
+          depends_on:
+            - task_key: 1_configuration
+          notebook_task:
+            notebook_path: databricks_notebooks/2_dataset_loopup
+            base_parameters:
+              environment: ${var.environment}
+            source: GIT
+          existing_cluster_id: ${var.cluster_id}
+        - task_key: LoopAllDatasets
+          depends_on:
+            - task_key: lookup
+          for_each_task:
+            inputs: "{{tasks.lookup.values.datasets_to_process}}"
+            concurrency: 1
+            task:
+              task_key: SourceToLanding
+              notebook_task:
+                notebook_path: databricks_notebooks/3_Source_To_Landing
+                base_parameters:
+                  dataset_id: "{{input.source_dataset_id}}"
+                  page_size: "{{input.page_size}}"
+                  start_timestamp: "{{input.last_timestamp}}"
+                  incremental_load_days: "{{input.load_increment_days}}"
+                  dataset_name: "{{input.source_dataset_name}}"
+                source: GIT
+              existing_cluster_id: ${var.cluster_id}
+        - task_key: ETL_Pipeline
+          depends_on:
+            - task_key: LoopAllDatasets
+          pipeline_task:
+            pipeline_id: 56fa4f67-8478-4001-9d6f-413f269fde5c
+            full_refresh: false
+      git_source:
+        git_url: https://bitbucket.org/ethanworkspace/wartsila-project/
+        git_provider: bitbucketCloud
+        git_branch: ${var.environment}
+      queue:
+        enabled: true

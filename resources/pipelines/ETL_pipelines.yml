@@ -1,0 +1,17 @@
+resources:
+  pipelines:
+    pipeline_etl_pipeline:
+      name: ETL_Pipeline
+      configuration:
+        datasets: '[{"id": 248, "name": "Solar power generation"}, {"id": 245, "name":
+          "Wind power generation"}, {"id": 358, "name": "Electricity
+          consumption"}]'
+        environment: ${var.environment}
+      libraries:
+        - glob:
+            include: /Workspace/Users/u8627848792@gmail.com/fingrid-aws-demo/databricks_notebooks/DLT_Pipeline/DLT_Pipeline/transformations/**
+      schema: bronze
+      photon: true
+      catalog: w_dev
+      serverless: true
+      root_path: /Workspace/Users/u8627848792@gmail.com/fingrid-aws-demo/databricks_notebooks/DLT_Pipeline/DLT_Pipeline

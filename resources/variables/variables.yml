@@ -1,0 +1,7 @@
+variables:
+  cluster_id:
+    description: "The ID of the cluster to use for job tasks in current env."
+    default: "0923-182558-foyt4nl4"
+  environment:
+    description: "The current env."
+    default: "dev"
