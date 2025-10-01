@@ -104,6 +104,7 @@ targets:
       source_linked_deployment: false
     workspace:
       host: https://dbc-c93e1e6f-75f2.cloud.databricks.com/
+      root_path: /Workspace/Users/u8627848792@gmail.com/Test/.bundle/${bundle.name}/${bundle.target}
     variables:
       cluster_id: "0924-141340-473elqxr"
       environment: "test"
