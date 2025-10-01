@@ -1,0 +1,46 @@
+# This is the final workflow file with an added debugging step.
+# It will help diagnose why the secrets are not being loaded.
+
+name: Deploy Databricks Notebooks
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'The target environment (dev or test)'
+        required: true
+        default: 'dev'
+
+jobs:
+  deploy-to-databricks:
+    environment: ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Databricks CLI
+        uses: databricks/setup-cli@main
+
+      # =======================================================
+      # ===== FINAL DEBUGGING STEP ADDED BELOW =====
+      # =======================================================
+      - name: "Debug: Check for Secrets"
+        run: |
+          echo "Attempting to deploy to environment: ${{ github.event.inputs.environment }}"
+          echo "DATABRICKS_HOST is: ${{ secrets.DATABRICKS_HOST }}"
+          if [ -z "${{ secrets.DATABRICKS_TOKEN }}" ]; then
+            echo "DATABRICKS_TOKEN secret is NOT set!"
+          else
+            echo "DATABRICKS_TOKEN secret is set (value is hidden)."
+          fi
+      # =======================================================
+      # =======================================================
+
+      - name: Deploy and Run Databricks Asset Bundle
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          databricks bundle deploy -t ${{ github.event.inputs.environment }}
+          # databricks bundle run multi_task_job -t ${{ github.event.inputs.environment }}
