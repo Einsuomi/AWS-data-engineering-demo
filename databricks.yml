@@ -37,7 +37,7 @@ resources:
       tasks:
         - task_key: 1_configuration
           notebook_task:
-            notebook_path: src/notebooks/1_Configuration
+            notebook_path: src/notebooks/1_Configuration.ipynb
             base_parameters:
               environment: ${var.environment}
           existing_cluster_id: ${var.cluster_id}
@@ -45,7 +45,7 @@ resources:
           depends_on:
             - task_key: 1_configuration
           notebook_task:
-            notebook_path: src/notebooks/2_dataset_loopup
+            notebook_path: src/notebooks/2_dataset_loopup.ipynb
             base_parameters:
               environment: ${var.environment}
           existing_cluster_id: ${var.cluster_id}
@@ -58,7 +58,7 @@ resources:
             task:
               task_key: SourceToLanding
               notebook_task:
-                notebook_path: src/notebooks/3_Source_To_Landing
+                notebook_path: src/notebooks/3_Source_To_Landing.ipynb
                 base_parameters:
                   dataset_id: "{{input.source_dataset_id}}"
                   page_size: "{{input.page_size}}"
