@@ -67,6 +67,7 @@ resources:
                   start_timestamp: "{{input.last_timestamp}}"
                   incremental_load_days: "{{input.load_increment_days}}"
                   dataset_name: "{{input.source_dataset_name}}"
+                  environment: ${var.environment}
               existing_cluster_id: ${var.cluster_id}
         - task_key: ETL_Pipeline
           depends_on:
