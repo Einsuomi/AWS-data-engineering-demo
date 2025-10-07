@@ -1,4 +1,4 @@
-# Energy Data Processing DLT Pipeline
+# Databricks DLT Pipeline
 
 ## Overview
 
